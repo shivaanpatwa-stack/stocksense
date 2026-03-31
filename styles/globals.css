@@ -1,0 +1,113 @@
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-display: 'Syne', sans-serif;
+  --font-body: 'DM Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #070d1a;
+  color: #e8edf7;
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+::selection {
+  background: rgba(26, 111, 255, 0.35);
+  color: #fff;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: #070d1a;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(26, 111, 255, 0.3);
+  border-radius: 2px;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(26, 111, 255, 0.4); }
+  70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(26, 111, 255, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(26, 111, 255, 0); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-fade-up {
+  animation: fadeUp 0.5s ease forwards;
+}
+
+.shimmer {
+  background: linear-gradient(90deg, #0c1526 25%, #162240 50%, #0c1526 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.glass-card {
+  background: rgba(12, 21, 38, 0.8);
+  border: 1px solid rgba(26, 111, 255, 0.15);
+  backdrop-filter: blur(12px);
+}
+
+.blue-glow {
+  box-shadow: 0 0 30px rgba(26, 111, 255, 0.15), inset 0 1px 0 rgba(26, 111, 255, 0.1);
+}
+
+.metric-card {
+  background: #0c1526;
+  border: 1px solid rgba(26, 111, 255, 0.1);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.metric-card:hover {
+  border-color: rgba(26, 111, 255, 0.28);
+  background: #111d33;
+}
+
+.verdict-buy {
+  border-color: rgba(0, 212, 160, 0.4) !important;
+  background: rgba(0, 212, 160, 0.06) !important;
+}
+
+.verdict-sell {
+  border-color: rgba(255, 77, 106, 0.4) !important;
+  background: rgba(255, 77, 106, 0.06) !important;
+}
+
+.verdict-hold {
+  border-color: rgba(255, 181, 71, 0.4) !important;
+  background: rgba(255, 181, 71, 0.06) !important;
+}
+
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(26, 111, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(26, 111, 255, 0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
