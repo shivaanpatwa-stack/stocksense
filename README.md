@@ -12,9 +12,10 @@ A standalone stock analysis website built with Next.js. Fetches real financial d
 - Works for NSE & BSE stocks
 
 ## Stack
-- Next.js 14
+- Next.js 16
 - Tailwind CSS
 - yahoo-finance2 (free, unofficial Yahoo Finance API)
+- Screener.in (fundamentals, pros/cons)
 - Vercel (free tier)
 
 ---
