@@ -109,6 +109,8 @@ async function fetchYahoo(symbol) {
         }),
       ]);
 
+      console.log('Yahoo result:', JSON.stringify(summary?.financialData).slice(0, 200));
+
       const fd = summary?.financialData  || {};
       const ks = summary?.defaultKeyStatistics || {};
 
@@ -152,8 +154,8 @@ async function fetchYahoo(symbol) {
         week52High: quote?.fiftyTwoWeekHigh ?? get(ks, 'fiftyTwoWeekHigh'),
         week52Low:  quote?.fiftyTwoWeekLow  ?? get(ks, 'fiftyTwoWeekLow'),
       };
-    } catch (_) {
-      // try next ticker
+    } catch (err) {
+      console.log(`Yahoo error for ${ticker}:`, err.message);
     }
   }
 
