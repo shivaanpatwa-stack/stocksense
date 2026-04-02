@@ -119,34 +119,41 @@ async function fetchYahoo(symbol) {
       const fd = summary?.financialData || {};
       const ks = summary?.defaultKeyStatistics || {};
 
+      // yahoo-finance2 returns plain numbers; handle legacy {raw} shape just in case
       const pick = (obj, key) => {
         const v = obj?.[key];
         if (v == null) return null;
         if (typeof v === 'object' && 'raw' in v) return v.raw;
-        return v;
+        return typeof v === 'number' ? v : null;
       };
+
+      // Yahoo margins are decimals (0.25 = 25%) → multiply by 100
+      const pct = (v) => (v != null ? parseFloat((v * 100).toFixed(2)) : null);
+      // Yahoo debt/cash/fcf are raw INR → divide by 1e7 to get Crores
+      const toCr = (v) => (v != null ? parseFloat((v / 1e7).toFixed(2)) : null);
+      // Yahoo debtToEquity is in percentage form (150 = 1.5x) → divide by 100
+      const deRatio = (v) => (v != null ? parseFloat((v / 100).toFixed(4)) : null);
 
       const result = {
-        grossMargins: pick(fd, 'grossMargins'),
-        operatingMargins: pick(fd, 'operatingMargins'),
-        profitMargins: pick(fd, 'profitMargins'),
-        revenueGrowth: pick(fd, 'revenueGrowth'),
-        earningsGrowth: pick(fd, 'earningsGrowth'),
-        debtToEquity: pick(fd, 'debtToEquity'),
+        grossMargin: pct(pick(fd, 'grossMargins')),
+        operatingMargin: pct(pick(fd, 'operatingMargins')),
+        netMargin: pct(pick(fd, 'profitMargins')),
+        revenueGrowthYoY: pct(pick(fd, 'revenueGrowth')),
+        earningsGrowthYoY: pct(pick(fd, 'earningsGrowth')),
+        debtToEquity: deRatio(pick(fd, 'debtToEquity')),
         currentRatio: pick(fd, 'currentRatio'),
-        totalDebt: pick(fd, 'totalDebt'),
-        totalCash: pick(fd, 'totalCash'),
-        freeCashflow: pick(fd, 'freeCashflow'),
-        targetMeanPrice: pick(fd, 'targetMeanPrice'),
-        targetLowPrice: pick(fd, 'targetLowPrice'),
-        targetHighPrice: pick(fd, 'targetHighPrice'),
-        recommendationKey: pick(fd, 'recommendationKey'),
-        numberOfAnalystOpinions: pick(fd, 'numberOfAnalystOpinions'),
-        week52High: pick(ks, 'fiftyTwoWeekHigh') ?? pick(quote, 'fiftyTwoWeekHigh'),
-        week52Low: pick(ks, 'fiftyTwoWeekLow') ?? pick(quote, 'fiftyTwoWeekLow'),
+        totalDebtCr: toCr(pick(fd, 'totalDebt')),
+        totalCashCr: toCr(pick(fd, 'totalCash')),
+        freeCashFlowCr: toCr(pick(fd, 'freeCashflow')),
+        targetPriceMean: pick(fd, 'targetMeanPrice'),
+        targetPriceLow: pick(fd, 'targetLowPrice'),
+        targetPriceHigh: pick(fd, 'targetHighPrice'),
+        recommendationKey: pick(fd, 'recommendationKey') || fd?.recommendationKey || null,
+        numberOfAnalysts: pick(fd, 'numberOfAnalystOpinions'),
+        week52High: pick(ks, 'fiftyTwoWeekHigh') ?? quote?.fiftyTwoWeekHigh ?? null,
+        week52Low: pick(ks, 'fiftyTwoWeekLow') ?? quote?.fiftyTwoWeekLow ?? null,
       };
 
-      // Only return if we got at least some useful data
       const hasData = Object.values(result).some((v) => v != null);
       if (hasData) return result;
     } catch (_) {}
@@ -170,20 +177,26 @@ export default async function handler(req, res) {
     ]);
 
     if (!screener) {
-      return res.status(404).json({ error: `Could not fetch data for "${symbol}". Make sure it's a valid NSE ticker.` });
+      return res.status(404).json({ error: `Could not fetch data for "${symbol}". Make sure it's a valid NSE/BSE ticker.` });
     }
 
-    // Merge: Yahoo Finance fills in fields; Screener data wins for fields it already has
+    // Merge: Screener wins for its own fields; Yahoo fills everything else.
+    // Never leave a field null if either source has it.
     const data = {
       ticker: symbol,
       exchange: 'NSE',
       currency: 'INR',
 
-      // Screener fields (primary)
+      // Identity
       name: screener.name,
       sector: screener.sector,
       about: screener.about,
+      screenerUrl: screener.screenerUrl,
+
+      // Price & market
       price: screener.price,
+
+      // Screener-primary fields
       marketCap: screener.marketCap,
       peRatio: screener.peRatio,
       pbRatio: screener.pbRatio,
@@ -192,28 +205,31 @@ export default async function handler(req, res) {
       roe: screener.roe,
       roce: screener.roce,
       dividendYield: screener.dividendYield,
+
+      // 52-week: Screener first, Yahoo fallback
       week52High: screener.week52High ?? yahoo?.week52High ?? null,
       week52Low: screener.week52Low ?? yahoo?.week52Low ?? null,
+
+      // Screener qualitative
       pros: screener.pros,
       cons: screener.cons,
-      screenerUrl: screener.screenerUrl,
 
-      // Yahoo Finance fields
-      grossMargins: yahoo?.grossMargins ?? null,
-      operatingMargins: yahoo?.operatingMargins ?? null,
-      profitMargins: yahoo?.profitMargins ?? null,
-      revenueGrowth: yahoo?.revenueGrowth ?? null,
-      earningsGrowth: yahoo?.earningsGrowth ?? null,
+      // Yahoo Finance fields (with Screener fallbacks where applicable)
+      grossMargin: yahoo?.grossMargin ?? null,
+      operatingMargin: yahoo?.operatingMargin ?? null,
+      netMargin: yahoo?.netMargin ?? null,
+      revenueGrowthYoY: yahoo?.revenueGrowthYoY ?? null,
+      earningsGrowthYoY: yahoo?.earningsGrowthYoY ?? null,
       debtToEquity: yahoo?.debtToEquity ?? null,
       currentRatio: yahoo?.currentRatio ?? null,
-      totalDebt: yahoo?.totalDebt ?? null,
-      totalCash: yahoo?.totalCash ?? null,
-      freeCashflow: yahoo?.freeCashflow ?? null,
-      targetMeanPrice: yahoo?.targetMeanPrice ?? null,
-      targetLowPrice: yahoo?.targetLowPrice ?? null,
-      targetHighPrice: yahoo?.targetHighPrice ?? null,
+      totalDebtCr: yahoo?.totalDebtCr ?? null,
+      totalCashCr: yahoo?.totalCashCr ?? null,
+      freeCashFlowCr: yahoo?.freeCashFlowCr ?? null,
+      targetPriceMean: yahoo?.targetPriceMean ?? null,
+      targetPriceLow: yahoo?.targetPriceLow ?? null,
+      targetPriceHigh: yahoo?.targetPriceHigh ?? null,
       recommendationKey: yahoo?.recommendationKey ?? null,
-      numberOfAnalystOpinions: yahoo?.numberOfAnalystOpinions ?? null,
+      numberOfAnalysts: yahoo?.numberOfAnalysts ?? null,
     };
 
     res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate');

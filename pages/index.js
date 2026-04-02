@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Head from 'next/head';
 import { scoreStock, buildClaudePrompt, fmtPrice, fmtPct, fmtCr, fmtNum } from '../lib/utils';
 
@@ -14,9 +14,9 @@ function MetricCard({ label, value, sub, color }) {
   };
   return (
     <div className="metric-card">
-      <p className="text-xs font-mono uppercase tracking-widest text-text-muted mb-1">{label}</p>
-      <p className={`text-lg font-display font-semibold ${colorMap[color] || colorMap.default}`}>{value}</p>
-      {sub && <p className="text-xs text-text-secondary mt-0.5">{sub}</p>}
+      <p className="text-[10px] md:text-xs font-mono uppercase tracking-widest text-text-muted mb-1">{label}</p>
+      <p className={`text-base md:text-lg font-display font-semibold ${colorMap[color] || colorMap.default}`}>{value}</p>
+      {sub && <p className="text-[10px] md:text-xs text-text-secondary mt-0.5">{sub}</p>}
     </div>
   );
 }
@@ -77,11 +77,47 @@ export default function Home() {
   const [error, setError] = useState('');
   const [data, setData] = useState(null);
   const [scoring, setScoring] = useState(null);
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const resultsRef = useRef(null);
+  const suggestDebounce = useRef(null);
+  const searchBoxRef = useRef(null);
+
+  // Fetch autocomplete suggestions
+  useEffect(() => {
+    if (query.trim().length < 2) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+    clearTimeout(suggestDebounce.current);
+    suggestDebounce.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}`);
+        const json = await res.json();
+        setSuggestions(json.quotes || []);
+        setShowSuggestions((json.quotes || []).length > 0);
+      } catch (_) {}
+    }, 250);
+    return () => clearTimeout(suggestDebounce.current);
+  }, [query]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (searchBoxRef.current && !searchBoxRef.current.contains(e.target)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   const search = async (ticker) => {
     const t = (ticker || query).trim().toUpperCase();
     if (!t) return;
+    setShowSuggestions(false);
+    setSuggestions([]);
     setLoading(true);
     setError('');
     setData(null);
@@ -100,6 +136,12 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const pickSuggestion = (s) => {
+    setQuery(s.symbol);
+    setShowSuggestions(false);
+    search(s.symbol);
   };
 
   const openClaude = () => {
@@ -129,7 +171,7 @@ export default function Home() {
         <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] rounded-full bg-blue-500/5 blur-3xl pointer-events-none" />
 
         {/* Nav */}
-        <nav className="border-b border-border-dim px-6 py-4 flex items-center justify-between max-w-6xl mx-auto">
+        <nav className="border-b border-border-dim px-4 md:px-6 py-4 flex items-center justify-between max-w-6xl mx-auto">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-blue flex items-center justify-center">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -141,42 +183,63 @@ export default function Home() {
           <div className="flex items-center gap-4 text-xs text-text-secondary font-mono">
             <span className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-              NSE / BSE Live
+              <span className="hidden sm:inline">NSE / BSE Live</span>
             </span>
-            <a href="#" className="hover:text-blue transition-colors">Powered by Yahoo Finance</a>
           </div>
         </nav>
 
         {/* Hero */}
-        <div className="max-w-6xl mx-auto px-6 pt-16 pb-12 text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-border text-xs font-mono text-blue mb-6 bg-blue-dim">
+        <div className="max-w-6xl mx-auto px-4 md:px-6 pt-10 md:pt-16 pb-8 md:pb-12 text-center">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-border text-xs font-mono text-blue mb-4 md:mb-6 bg-blue-dim">
             <span>Indian Markets · NSE · BSE · Real Data</span>
           </div>
-          <h1 className="font-display font-bold text-5xl md:text-6xl tracking-tight text-white mb-4 leading-tight">
+          <h1 className="font-display font-bold text-4xl md:text-5xl lg:text-6xl tracking-tight text-white mb-3 md:mb-4 leading-tight">
             Analyse Any Indian<br />
             <span className="text-blue">Stock in Seconds</span>
           </h1>
-          <p className="text-text-secondary text-lg max-w-xl mx-auto mb-10">
+          <p className="text-text-secondary text-base md:text-lg max-w-xl mx-auto mb-8 md:mb-10 px-2">
             Real financial data — P/E, P/B, ROE, margins, debt, growth — scored automatically. Then send to Claude for plain-English AI analysis.
           </p>
 
           {/* Search */}
           <div className="max-w-xl mx-auto">
-            <div className="flex gap-3">
+            <div className="flex gap-2 md:gap-3" ref={searchBoxRef}>
               <div className="flex-1 relative">
                 <input
                   type="text"
                   value={query}
                   onChange={e => setQuery(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && search()}
-                  placeholder="Enter ticker — e.g. RELIANCE, TCS, ZOMATO"
-                  className="w-full bg-bg-card border border-border rounded-xl px-4 py-3.5 text-white placeholder:text-text-muted font-mono text-sm focus:outline-none focus:border-blue transition-colors"
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') { search(); }
+                    if (e.key === 'Escape') setShowSuggestions(false);
+                  }}
+                  onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+                  placeholder="Ticker or company — e.g. RELIANCE, TCS"
+                  className="w-full bg-bg-card border border-border rounded-xl px-4 py-3 md:py-3.5 text-white placeholder:text-text-muted font-mono text-sm focus:outline-none focus:border-blue transition-colors"
                 />
+                {/* Autocomplete dropdown */}
+                {showSuggestions && suggestions.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-bg-card border border-border rounded-xl overflow-hidden z-50 shadow-xl">
+                    {suggestions.map((s) => (
+                      <button
+                        key={s.symbol + s.exchange}
+                        onMouseDown={e => { e.preventDefault(); pickSuggestion(s); }}
+                        className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-bg-elevated transition-colors text-left"
+                      >
+                        <div>
+                          <span className="font-mono font-semibold text-white text-sm">{s.symbol}</span>
+                          <span className="text-text-secondary text-xs ml-2 truncate max-w-[180px] inline-block align-middle">{s.name}</span>
+                        </div>
+                        <span className="text-[10px] font-mono text-text-muted bg-bg-elevated px-1.5 py-0.5 rounded ml-2 flex-shrink-0">{s.exchange}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               <button
                 onClick={() => search()}
                 disabled={loading}
-                className="px-6 py-3.5 bg-blue hover:bg-blue-bright disabled:opacity-50 text-white font-display font-semibold rounded-xl transition-all text-sm"
+                className="px-4 md:px-6 py-3 md:py-3.5 bg-blue hover:bg-blue-bright disabled:opacity-50 text-white font-display font-semibold rounded-xl transition-all text-sm flex-shrink-0"
               >
                 {loading ? (
                   <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -210,7 +273,7 @@ export default function Home() {
 
         {/* Loading skeleton */}
         {loading && (
-          <div className="max-w-6xl mx-auto px-6 pb-16">
+          <div className="max-w-6xl mx-auto px-4 md:px-6 pb-16">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
               {[...Array(8)].map((_, i) => (
                 <div key={i} className="metric-card shimmer h-20 rounded-xl" />
@@ -221,42 +284,39 @@ export default function Home() {
 
         {/* Results */}
         {data && scoring && !loading && (
-          <div ref={resultsRef} className="max-w-6xl mx-auto px-6 pb-20 animate-fade-up">
+          <div ref={resultsRef} className="max-w-6xl mx-auto px-4 md:px-6 pb-20 animate-fade-up">
 
             {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-8 pb-6 border-b border-border-dim">
+            <div className="flex flex-col md:flex-row md:items-start justify-between gap-3 md:gap-4 mb-6 md:mb-8 pb-5 md:pb-6 border-b border-border-dim">
               <div>
-                <div className="flex items-center gap-3 mb-1">
-                  <h2 className="font-display font-bold text-3xl text-white">{data.name}</h2>
+                <div className="flex items-center gap-2 md:gap-3 mb-1 flex-wrap">
+                  <h2 className="font-display font-bold text-2xl md:text-3xl text-white">{data.name}</h2>
                   <span className="text-xs font-mono px-2 py-1 rounded-md bg-bg-elevated border border-border-dim text-text-secondary">{data.ticker}</span>
                 </div>
-                <p className="text-text-secondary text-sm">{data.exchange} · {data.sector || 'N/A'} · {data.industry || 'N/A'}</p>
+                <p className="text-text-secondary text-sm">{data.exchange} · {data.sector || 'N/A'}</p>
               </div>
-              <div className="text-right">
-                <div className="font-display font-bold text-4xl text-white">{fmtPrice(data.price)}</div>
-                <div className={`text-sm font-mono ${data.changePct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                  {data.changePct >= 0 ? '▲' : '▼'} {Math.abs(data.changePct || 0).toFixed(2)}% today
-                </div>
+              <div className="md:text-right">
+                <div className="font-display font-bold text-3xl md:text-4xl text-white">{fmtPrice(data.price)}</div>
               </div>
             </div>
 
             {/* Verdict Card */}
-            <div className={`glass-card rounded-2xl p-6 mb-8 border-2 ${vc?.glow} ${vc?.badge}`} style={{ borderColor: undefined }}>
-              <div className={`glass-card rounded-2xl p-6 mb-0 ${scoring.verdictClass === 'buy' ? 'verdict-buy' : scoring.verdictClass === 'hold' ? 'verdict-hold' : 'verdict-sell'}`}>
+            <div className={`glass-card rounded-2xl p-4 md:p-6 mb-6 md:mb-8 border-2 ${vc?.glow} ${vc?.badge}`} style={{ borderColor: undefined }}>
+              <div className={`glass-card rounded-2xl p-4 md:p-6 mb-0 ${scoring.verdictClass === 'buy' ? 'verdict-buy' : scoring.verdictClass === 'hold' ? 'verdict-hold' : 'verdict-sell'}`}>
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="flex items-center gap-4">
-                    <div className={`font-display font-black text-5xl ${vc?.score}`}>{scoring.verdict}</div>
+                  <div className="flex items-center gap-3 md:gap-4">
+                    <div className={`font-display font-black text-4xl md:text-5xl ${vc?.score}`}>{scoring.verdict}</div>
                     <div>
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-xs font-mono text-text-secondary uppercase tracking-widest">Fundamental Score</span>
                         <span className={`font-mono font-bold ${vc?.score}`}>{scoring.score}/100</span>
                       </div>
-                      <p className="text-sm text-text-secondary max-w-md">{scoring.verdictDetail}</p>
+                      <p className="text-xs md:text-sm text-text-secondary max-w-md">{scoring.verdictDetail}</p>
                     </div>
                   </div>
                   <button
                     onClick={openClaude}
-                    className="flex items-center gap-2.5 px-5 py-3 bg-blue hover:bg-blue-bright text-white font-display font-semibold rounded-xl transition-all text-sm whitespace-nowrap"
+                    className="flex items-center justify-center gap-2.5 px-5 py-3 bg-blue hover:bg-blue-bright text-white font-display font-semibold rounded-xl transition-all text-sm w-full md:w-auto"
                   >
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                       <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/>
@@ -269,21 +329,21 @@ export default function Home() {
             </div>
 
             {/* Key metrics grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mb-6 md:mb-8">
               <MetricCard label="Market Cap" value={fmtCr(data.marketCap)} sub="Total company value" />
-              <MetricCard label="P/E Ratio" value={data.peRatio ?? '—'} sub={`Forward: ${data.forwardPE ?? '—'}`} color={data.peRatio < 20 ? 'green' : data.peRatio > 40 ? 'red' : 'default'} />
+              <MetricCard label="P/E Ratio" value={data.peRatio ?? '—'} sub="Price to Earnings" color={data.peRatio < 20 ? 'green' : data.peRatio > 40 ? 'red' : 'default'} />
               <MetricCard label="P/B Ratio" value={data.pbRatio ?? '—'} sub="Price to Book" color={data.pbRatio < 1 ? 'green' : data.pbRatio > 8 ? 'red' : 'default'} />
               <MetricCard label="EPS" value={`₹${data.eps ?? '—'}`} sub="Earnings per share" color={data.eps > 0 ? 'green' : 'red'} />
-              <MetricCard label="52W High" value={fmtPrice(data.week52High)} sub={`${data.week52HighPct?.toFixed(1) ?? '—'}% from now`} />
-              <MetricCard label="52W Low" value={fmtPrice(data.week52Low)} sub={`${Math.abs(data.week52LowPct || 0).toFixed(1)}% from now`} />
+              <MetricCard label="52W High" value={fmtPrice(data.week52High)} sub="Year high" />
+              <MetricCard label="52W Low" value={fmtPrice(data.week52Low)} sub="Year low" />
               <MetricCard label="ROE" value={`${data.roe?.toFixed(1) ?? '—'}%`} sub="Return on equity" color={data.roe >= 20 ? 'green' : data.roe < 5 ? 'red' : 'default'} />
-              <MetricCard label="Dividend Yield" value={`${data.dividendYield?.toFixed(2) ?? '0.00'}%`} sub={`₹${data.dividendRate ?? '0'}/share`} color={data.dividendYield > 2 ? 'green' : 'default'} />
+              <MetricCard label="Dividend Yield" value={`${data.dividendYield?.toFixed(2) ?? '0.00'}%`} sub="Annual yield" color={data.dividendYield > 2 ? 'green' : 'default'} />
             </div>
 
-            {/* Two-column detail */}
-            <div className="grid md:grid-cols-2 gap-6 mb-8">
+            {/* Two-column detail — stacks on mobile */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-6 md:mb-8">
               {/* Profitability */}
-              <div className="glass-card rounded-2xl p-6">
+              <div className="glass-card rounded-2xl p-4 md:p-6">
                 <h3 className="font-display font-semibold text-white mb-4 flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-blue" />
                   Profitability
@@ -294,7 +354,7 @@ export default function Home() {
                     { label: 'Operating Margin', value: `${data.operatingMargin?.toFixed(1) ?? '—'}%`, good: data.operatingMargin > 15 },
                     { label: 'Net Margin', value: `${data.netMargin?.toFixed(1) ?? '—'}%`, good: data.netMargin > 10, bad: data.netMargin < 0 },
                     { label: 'ROE', value: `${data.roe?.toFixed(1) ?? '—'}%`, good: data.roe >= 20, bad: data.roe < 5 },
-                    { label: 'ROA', value: `${data.roa?.toFixed(1) ?? '—'}%`, good: data.roa > 5 },
+                    { label: 'ROCE', value: `${data.roce?.toFixed(1) ?? '—'}%`, good: data.roce >= 15 },
                   ].map(row => (
                     <div key={row.label} className="flex items-center justify-between py-2 border-b border-border-dim last:border-0">
                       <span className="text-sm text-text-secondary">{row.label}</span>
@@ -305,7 +365,7 @@ export default function Home() {
               </div>
 
               {/* Balance Sheet */}
-              <div className="glass-card rounded-2xl p-6">
+              <div className="glass-card rounded-2xl p-4 md:p-6">
                 <h3 className="font-display font-semibold text-white mb-4 flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-blue" />
                   Balance Sheet & Liquidity
@@ -327,7 +387,7 @@ export default function Home() {
               </div>
 
               {/* Growth */}
-              <div className="glass-card rounded-2xl p-6">
+              <div className="glass-card rounded-2xl p-4 md:p-6">
                 <h3 className="font-display font-semibold text-white mb-4 flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-blue" />
                   Growth Indicators
@@ -336,9 +396,9 @@ export default function Home() {
                   {[
                     { label: 'Revenue Growth YoY', value: `${data.revenueGrowthYoY?.toFixed(1) ?? '—'}%`, good: data.revenueGrowthYoY > 10, bad: data.revenueGrowthYoY < 0 },
                     { label: 'Earnings Growth YoY', value: `${data.earningsGrowthYoY?.toFixed(1) ?? '—'}%`, good: data.earningsGrowthYoY > 15, bad: data.earningsGrowthYoY < 0 },
-                    { label: 'Qtrly Earnings Growth', value: `${data.earningsQuarterlyGrowth?.toFixed(1) ?? '—'}%`, good: data.earningsQuarterlyGrowth > 10, bad: data.earningsQuarterlyGrowth < 0 },
-                    { label: 'EV/EBITDA', value: data.evToEbitda?.toFixed(1) ?? '—' },
-                    { label: 'EV/Revenue', value: data.evToRevenue?.toFixed(2) ?? '—' },
+                    { label: 'Book Value / Share', value: data.bookValue ? `₹${data.bookValue}` : '—' },
+                    { label: 'P/E Ratio', value: data.peRatio ?? '—', good: data.peRatio < 20, bad: data.peRatio > 40 },
+                    { label: 'ROCE', value: `${data.roce?.toFixed(1) ?? '—'}%`, good: data.roce >= 15 },
                   ].map(row => (
                     <div key={row.label} className="flex items-center justify-between py-2 border-b border-border-dim last:border-0">
                       <span className="text-sm text-text-secondary">{row.label}</span>
@@ -349,7 +409,7 @@ export default function Home() {
               </div>
 
               {/* Analyst */}
-              <div className="glass-card rounded-2xl p-6">
+              <div className="glass-card rounded-2xl p-4 md:p-6">
                 <h3 className="font-display font-semibold text-white mb-4 flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-blue" />
                   Analyst Consensus
@@ -359,7 +419,7 @@ export default function Home() {
                     <div className="flex items-end gap-3 mb-4">
                       <div>
                         <p className="text-xs text-text-muted font-mono uppercase tracking-widest mb-1">Mean Target</p>
-                        <p className="font-display font-bold text-3xl text-white">₹{data.targetPriceMean}</p>
+                        <p className="font-display font-bold text-2xl md:text-3xl text-white">₹{data.targetPriceMean}</p>
                       </div>
                       <div className={`text-sm font-mono font-medium mb-1 ${((data.targetPriceMean - data.price) / data.price * 100) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                         {fmtPct(((data.targetPriceMean - data.price) / data.price * 100))} potential
@@ -387,7 +447,7 @@ export default function Home() {
 
             {/* Historical bars */}
             {data.incomeHistory?.length > 0 && (
-              <div className="glass-card rounded-2xl p-6 mb-8">
+              <div className="glass-card rounded-2xl p-4 md:p-6 mb-6 md:mb-8">
                 <h3 className="font-display font-semibold text-white mb-6 flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-blue" />
                   Historical Financials (₹ Cr)
@@ -400,8 +460,46 @@ export default function Home() {
               </div>
             )}
 
+            {/* Pros & Cons */}
+            {(data.pros?.length > 0 || data.cons?.length > 0) && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-6 md:mb-8">
+                {data.pros?.length > 0 && (
+                  <div className="glass-card rounded-2xl p-4 md:p-6">
+                    <h3 className="font-display font-semibold text-green-400 mb-3 flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-green-400" />
+                      Pros
+                    </h3>
+                    <ul className="space-y-2">
+                      {data.pros.map((p, i) => (
+                        <li key={i} className="text-sm text-text-secondary flex gap-2">
+                          <span className="text-green-400 flex-shrink-0 mt-0.5">+</span>
+                          {p}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {data.cons?.length > 0 && (
+                  <div className="glass-card rounded-2xl p-4 md:p-6">
+                    <h3 className="font-display font-semibold text-red-400 mb-3 flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-red-400" />
+                      Cons
+                    </h3>
+                    <ul className="space-y-2">
+                      {data.cons.map((c, i) => (
+                        <li key={i} className="text-sm text-text-secondary flex gap-2">
+                          <span className="text-red-400 flex-shrink-0 mt-0.5">−</span>
+                          {c}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Signal flags */}
-            <div className="glass-card rounded-2xl p-6 mb-8">
+            <div className="glass-card rounded-2xl p-4 md:p-6 mb-6 md:mb-8">
               <h3 className="font-display font-semibold text-white mb-4 flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-blue" />
                 Signal Flags ({scoring.signals.length})
@@ -412,20 +510,20 @@ export default function Home() {
             </div>
 
             {/* Claude CTA */}
-            <div className="glass-card rounded-2xl p-8 text-center border border-border">
+            <div className="glass-card rounded-2xl p-6 md:p-8 text-center border border-border">
               <div className="w-12 h-12 rounded-2xl bg-blue/20 border border-blue/30 flex items-center justify-center mx-auto mb-4">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                   <circle cx="12" cy="12" r="10" stroke="#1a6fff" strokeWidth="1.5"/>
                   <path d="M8 12h8M14 9l3 3-3 3" stroke="#1a6fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </div>
-              <h3 className="font-display font-bold text-xl text-white mb-2">Want a deeper analysis?</h3>
+              <h3 className="font-display font-bold text-lg md:text-xl text-white mb-2">Want a deeper analysis?</h3>
               <p className="text-text-secondary text-sm mb-6 max-w-md mx-auto">
-                All the numbers above will be auto-packaged into a prompt and sent to Claude AI. You'll get a plain-English breakdown — what the business does, what the numbers mean, risks, and a final verdict.
+                All the numbers above will be auto-packaged into a prompt and sent to Claude AI for a plain-English breakdown — what the business does, what the numbers mean, risks, and a final verdict.
               </p>
               <button
                 onClick={openClaude}
-                className="inline-flex items-center gap-2.5 px-6 py-3 bg-blue hover:bg-blue-bright text-white font-display font-semibold rounded-xl transition-all"
+                className="inline-flex items-center justify-center gap-2.5 px-6 py-3 bg-blue hover:bg-blue-bright text-white font-display font-semibold rounded-xl transition-all w-full md:w-auto"
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                   <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/>
@@ -437,16 +535,16 @@ export default function Home() {
           </div>
         )}
 
-        {/* How it works section (shown when no data) */}
+        {/* How it works (shown when no data) */}
         {!data && !loading && (
-          <div className="max-w-6xl mx-auto px-6 pb-20">
-            <div className="grid md:grid-cols-3 gap-6">
+          <div className="max-w-6xl mx-auto px-4 md:px-6 pb-20">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
               {[
-                { icon: '01', title: 'Enter any Indian stock', desc: 'Type the NSE/BSE ticker. Large caps, mid caps, small caps, recent IPOs — all supported.' },
-                { icon: '02', title: 'Get instant fundamentals', desc: 'Real data from Yahoo Finance: P/E, P/B, ROE, margins, debt ratios, growth, analyst targets.' },
+                { icon: '01', title: 'Enter any Indian stock', desc: 'Type the NSE/BSE ticker or company name. Large caps, mid caps, small caps — all supported.' },
+                { icon: '02', title: 'Get instant fundamentals', desc: 'Real data from Screener.in + Yahoo Finance: P/E, P/B, ROE, margins, debt ratios, growth, analyst targets.' },
                 { icon: '03', title: 'Send to Claude for AI insight', desc: 'One click packages everything into a prompt. Claude gives you a full plain-English verdict.' },
               ].map(step => (
-                <div key={step.icon} className="glass-card rounded-2xl p-6">
+                <div key={step.icon} className="glass-card rounded-2xl p-5 md:p-6">
                   <div className="font-mono text-4xl font-bold text-blue-dim text-blue mb-4">{step.icon}</div>
                   <h3 className="font-display font-semibold text-white text-lg mb-2">{step.title}</h3>
                   <p className="text-text-secondary text-sm leading-relaxed">{step.desc}</p>
@@ -457,9 +555,9 @@ export default function Home() {
         )}
 
         {/* Footer */}
-        <footer className="border-t border-border-dim py-6 px-6 max-w-6xl mx-auto">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-text-muted font-mono">
-            <span>StockSense · Built for Indian markets · Data via Yahoo Finance</span>
+        <footer className="border-t border-border-dim py-6 px-4 md:px-6 max-w-6xl mx-auto">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-text-muted font-mono text-center md:text-left">
+            <span>StockSense · Built for Indian markets · Data via Screener.in + Yahoo Finance</span>
             <span>Not financial advice. Always do your own research.</span>
           </div>
         </footer>
